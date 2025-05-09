@@ -1,28 +1,54 @@
 const {JSDOM} = require("jsdom")
 
 
-async function crawlPage(currentURL){
+async function crawlPage(baseURL, currentURL, pages){
+
+    const baseURLObj = new URL(baseURL)
+    const currentURLObj = new URL(currentURL)
+
+    if(baseURLObj.hostname != currentURLObj.hostname){
+        return pages
+    }
+
+    const normalizedCurrentUrl = normalizeURL(currentURL)
+
+    if(pages[normalizedCurrentUrl] > 0){
+        pages[normalizedCurrentUrl]++
+        return pages
+    }
+
+    pages[normalizedCurrentUrl] = 1
+
     console.log(`Actively crawling ${currentURL}`)
+
     try{
         const resp = await fetch(currentURL)
 
         if(resp.status > 399){
             console.log(`Error in fetch with status code ${resp.status}, on page ${currentURL}`)
-            return
+            return pages
         }
 
         const contentType = resp.headers.get("content-type")
 
         if(!contentType.includes("text/html")){
             console.log(`Non HTML response, content type: ${contentType}, on page ${currentURL}`)
-            return
+            return pages
         }
 
-        console.log(await resp.text())
+        const htmlBody = await resp.text()
+
+        const nextURLs = getURLsFromHTML(htmlBody, baseURL)
+
+        for(element of nextURLs){
+            pages = await crawlPage(baseURL, element, pages)
+        }
     }
     catch(error){
         console.log(`Error in fetch ${error.message} on page ${currentURL}`)
     }
+
+    return pages
   
 }
 
@@ -47,7 +73,7 @@ function getURLsFromHTML(htmlBody, baseURL){
                 urls.push(linkElement.href)
             }
             catch(error){
-                console.log(`Error with relative URL: ${error.message}`)
+                console.log(`Error with absolute URL: ${error.message}`)
             }
         }
     }
